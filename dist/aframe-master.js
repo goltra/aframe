@@ -670,8 +670,15 @@ function plural(ms, n, name) {
 }
 
 },{}],8:[function(_dereq_,module,exports){
+/*
+object-assign
+(c) Sindre Sorhus
+@license MIT
+*/
+
 'use strict';
 /* eslint-disable no-unused-vars */
+var getOwnPropertySymbols = Object.getOwnPropertySymbols;
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var propIsEnumerable = Object.prototype.propertyIsEnumerable;
 
@@ -692,7 +699,7 @@ function shouldUseNative() {
 		// Detect buggy property enumeration order in older V8 versions.
 
 		// https://bugs.chromium.org/p/v8/issues/detail?id=4118
-		var test1 = new String('abc');  // eslint-disable-line
+		var test1 = new String('abc');  // eslint-disable-line no-new-wrappers
 		test1[5] = 'de';
 		if (Object.getOwnPropertyNames(test1)[0] === '5') {
 			return false;
@@ -721,7 +728,7 @@ function shouldUseNative() {
 		}
 
 		return true;
-	} catch (e) {
+	} catch (err) {
 		// We don't expect any of the above to throw, but better to be safe.
 		return false;
 	}
@@ -741,8 +748,8 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 			}
 		}
 
-		if (Object.getOwnPropertySymbols) {
-			symbols = Object.getOwnPropertySymbols(from);
+		if (getOwnPropertySymbols) {
+			symbols = getOwnPropertySymbols(from);
 			for (var i = 0; i < symbols.length; i++) {
 				if (propIsEnumerable.call(from, symbols[i])) {
 					to[symbols[i]] = from[symbols[i]];
@@ -60158,12 +60165,24 @@ module.exports.Component = registerComponent('look-controls', {
 
   onTouchMove: function (e) {
     var deltaY;
+    var deltaX;
+    var sceneEl = this.el.sceneEl;
     var yawObject = this.yawObject;
+    var pitchObject = this.pitchObject;
+
     if (!this.touchStarted) { return; }
     deltaY = 2 * Math.PI * (e.touches[0].pageX - this.touchStart.x) /
             this.el.sceneEl.canvas.clientWidth;
-    // Limits touch orientaion to to yaw (y axis)
+    
+    // Limits touch orientaion to to yaw (y axis) only if 
+    // vr mode is actived
     yawObject.rotation.y -= deltaY * 0.5;
+	if(!sceneEl.is('vr-mode')){
+    	deltaX = 2 * Math.PI * (e.touches[0].pageY - this.touchStart.y) /
+            this.el.sceneEl.canvas.clientHeight;
+		pitchObject.rotation.x -= deltaX * 0.5;
+	}
+
     this.touchStart = {
       x: e.touches[0].pageX,
       y: e.touches[0].pageY
@@ -67660,7 +67679,7 @@ _dereq_('./core/a-mixin');
 _dereq_('./extras/components/');
 _dereq_('./extras/primitives/');
 
-console.log('A-Frame Version: 0.4.0 (Date 25-01-2017, Commit #5dba9e8)');
+console.log('A-Frame Version: 0.4.0 (Date 26-01-2017, Commit #0bb7dba)');
 console.log('three Version:', pkg.dependencies['three']);
 console.log('WebVR Polyfill Version:', pkg.dependencies['webvr-polyfill']);
 
