@@ -1,5 +1,6 @@
-/* global HTMLElement */
+/* global HTMLElement, Node */
 var schema = require('./schema');
+var scenes = require('./scene/scenes');
 var systems = require('./system');
 var utils = require('../utils/');
 
@@ -11,6 +12,10 @@ var isSingleProp = schema.isSingleProperty;
 var stringifyProperties = schema.stringifyProperties;
 var stringifyProperty = schema.stringifyProperty;
 var styleParser = utils.styleParser;
+var warn = utils.debug('core:component:warn');
+
+var aframeScript = document.currentScript;
+var upperCaseRegExp = new RegExp('[A-Z]+');
 
 /**
  * Component class definition.
@@ -194,14 +199,13 @@ Component.prototype = {
     if (!el.hasLoaded) { return; }
 
     if (this.updateSchema) {
-      this.updateSchema(buildData(el, this.name, this.attrName, this.schema, this.attrValue, true));
+      this.updateSchema(buildData(el, this.name, this.attrName, this.schema, this.attrValue,
+                                  true));
     }
     this.data = buildData(el, this.name, this.attrName, this.schema, this.attrValue);
 
-    // Don't update if properties haven't changed
-    if (!isSinglePropSchema && utils.deepEqual(oldData, this.data)) { return; }
-
     if (!this.initialized) {
+      // Initialize component.
       this.init();
       this.initialized = true;
       // Play the component if the entity is playing.
@@ -213,6 +217,10 @@ Component.prototype = {
         data: this.getData()
       }, false);
     } else {
+      // Don't update if properties haven't changed
+      if (utils.deepEqual(oldData, this.data)) { return; }
+
+      // Update component.
       this.update(oldData);
       el.emit('componentchanged', {
         id: this.id,
@@ -221,6 +229,22 @@ Component.prototype = {
         oldData: oldData
       }, false);
     }
+  },
+
+  /**
+   * Reset value of a property to the property's default value.
+   * If single-prop component, reset value to component's default value.
+   *
+   * @param {string} propertyName - Name of property to reset.
+   */
+  resetProperty: function (propertyName) {
+    if (isSingleProp(this.schema)) {
+      this.attrValue = undefined;
+    } else {
+      if (!(propertyName in this.attrValue)) { return; }
+      delete this.attrValue[propertyName];
+    }
+    this.updateProperties(this.attrValue);
   },
 
   /**
@@ -242,6 +266,11 @@ Component.prototype = {
   }
 };
 
+// For testing.
+if (window.debug) {
+  var registrationOrderWarnings = module.exports.registrationOrderWarnings = {};
+}
+
 /**
  * Registers a component to A-Frame.
  *
@@ -253,13 +282,29 @@ module.exports.registerComponent = function (name, definition) {
   var NewComponent;
   var proto = {};
 
-  var testForUpperCase = new RegExp('[A-Z]+');
+  // Warning if component is statically registered after the scene.
+  if (document.currentScript && document.currentScript !== aframeScript) {
+    scenes.forEach(function checkPosition (sceneEl) {
+      // Okay to register component after the scene at runtime.
+      if (sceneEl.hasLoaded) { return; }
 
-  if (testForUpperCase.test(name) === true) {
-    console.warn('The component name `' + name + '`contains uppercase characters,' +
-                  'but HTML ignores the capitalization of attributes. ' +
-                  'Consider changing it. ' +
-                  'Your component can be accessed as ' + name.toLowerCase());
+      // Check that component is declared before the scene.
+      if (document.currentScript.compareDocumentPosition(sceneEl) ===
+          Node.DOCUMENT_POSITION_FOLLOWING) { return; }
+
+      warn('The component `' + name + '` was registered in a <script> tag after the scene. ' +
+           'Component <script> tags in an HTML file should be declared *before* the scene ' +
+           'such that the component is available to entities during scene initialization.');
+
+      // For testing.
+      if (window.debug) { registrationOrderWarnings[name] = true; }
+    });
+  }
+
+  if (upperCaseRegExp.test(name) === true) {
+    warn('The component name `' + name + '` contains uppercase characters, but ' +
+         'HTML will ignore the capitalization of attribute names. ' +
+         'Change the name to be lowercase: `' + name.toLowerCase() + '`');
   }
 
   if (name.indexOf('__') !== -1) {

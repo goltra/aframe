@@ -3,8 +3,10 @@ var AEntity = require('core/a-entity');
 var ANode = require('core/a-node');
 var AScene = require('core/scene/a-scene');
 var components = require('core/component').components;
-var helpers = require('../../helpers');
+var scenes = require('core/scene/scenes');
 var systems = require('core/system').systems;
+
+var helpers = require('../../helpers');
 
 /**
  * Tests in this suite should not involve WebGL contexts or renderer.
@@ -257,7 +259,7 @@ suite('a-scene (without renderer)', function () {
   });
 
   suite('system', function () {
-    setup(function () {
+    teardown(function () {
       delete components.test;
       delete systems.test;
     });
@@ -273,16 +275,47 @@ suite('a-scene (without renderer)', function () {
       assert.equal(sceneEl.getAttribute('test'), 'system');
     });
 
-    test('does not initialize component on setAttribute', function () {
+    test('does not initialize component on setAttribute', function (done) {
       var sceneEl = document.createElement('a-scene');
       var stub = sinon.stub();
 
       AFRAME.registerComponent('test', {init: stub});
       AFRAME.registerSystem('test', {});
 
-      sceneEl.initSystem('test');
       sceneEl.setAttribute('test', '');
-      assert.notOk(stub.called);
+
+      sceneEl.addEventListener('loaded', () => {
+        assert.notOk(stub.called);
+        done();
+      });
+      document.body.appendChild(sceneEl);
+    });
+
+    test('does not update component', function (done) {
+      var childEl;
+      var componentUpdateStub = sinon.stub();
+      var sceneEl;
+
+      AFRAME.registerComponent('test', {
+        schema: {componentProp: {default: 'foo'}},
+        update: componentUpdateStub
+      });
+      AFRAME.registerSystem('test', {
+        schema: {systemProp: {default: 'foo'}}
+      });
+
+      childEl = document.createElement('a-entity');
+      sceneEl = document.createElement('a-scene');
+      childEl.setAttribute('test', '');
+      sceneEl.setAttribute('test', '');
+      sceneEl.appendChild(childEl);
+
+      sceneEl.addEventListener('loaded', () => {
+        assert.notOk('systemProp' in childEl.components.test.data);
+        assert.equal(componentUpdateStub.callCount, 1);
+        done();
+      });
+      document.body.appendChild(sceneEl);
     });
   });
 });
@@ -375,5 +408,35 @@ helpers.getSkipCISuite()('a-scene (with renderer)', function () {
     scene.render();
     sinon.assert.called(Component.tick);
     sinon.assert.calledWith(Component.tick, scene.time);
+  });
+});
+
+suite('scenes', function () {
+  var sceneEl;
+
+  setup(function () {
+    scenes.length = 0;
+    sceneEl = document.createElement('a-scene');
+  });
+
+  test('is appended with scene attach', function (done) {
+    assert.notOk(scenes.length);
+    sceneEl.addEventListener('loaded', () => {
+      assert.ok(scenes.length);
+      done();
+    });
+    document.body.appendChild(sceneEl);
+  });
+
+  test('is popped with scene detached', function (done) {
+    sceneEl.addEventListener('loaded', () => {
+      assert.ok(scenes.length);
+      document.body.removeChild(sceneEl);
+      setTimeout(() => {
+        assert.notOk(scenes.length);
+        done();
+      });
+    });
+    document.body.appendChild(sceneEl);
   });
 });

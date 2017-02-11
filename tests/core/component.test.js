@@ -1,6 +1,8 @@
-/* global assert, process, suite, test, setup, sinon, HTMLElement */
+/* global AFRAME, assert, process, suite, teardown, test, setup, sinon, HTMLElement */
 var buildData = require('core/component').buildData;
+var Component = require('core/component');
 var components = require('index').components;
+
 var helpers = require('../helpers');
 var registerComponent = require('index').registerComponent;
 var processSchema = require('core/schema').process;
@@ -155,8 +157,10 @@ suite('Component', function () {
       el.addEventListener('loaded', function () {
         el.setAttribute('dummy', '');
         data = el.getAttribute('dummy');
-        assert.shallowDeepEqual(data.direction, TestComponent.prototype.schema.direction.default);
-        assert.shallowDeepEqual(data.position, TestComponent.prototype.schema.position.default);
+        assert.shallowDeepEqual(data.direction,
+                                TestComponent.prototype.schema.direction.default);
+        assert.shallowDeepEqual(data.position,
+                                TestComponent.prototype.schema.position.default);
         assert.notEqual(data.direction, data.position);
         done();
       });
@@ -164,8 +168,13 @@ suite('Component', function () {
   });
 
   suite('updateProperties', function () {
-    test('emits componentchanged', function (done) {
-      var el = entityFactory();
+    var el;
+
+    setup(function () {
+      el = entityFactory();
+    });
+
+    test('emits componentchanged for multi-prop', function (done) {
       el.setAttribute('material', 'color: red');
       el.addEventListener('componentchanged', function (evt) {
         if (evt.detail.name !== 'material') { return; }
@@ -175,13 +184,106 @@ suite('Component', function () {
         assert.ok('id' in evt.detail);
         done();
       });
-      process.nextTick(function () {
+      setTimeout(() => {
         el.setAttribute('material', 'color: blue');
       });
     });
 
+    test('emits componentchanged for single-prop', function (done) {
+      el.setAttribute('position', {x: 0, y: 0, z: 0});
+      el.addEventListener('componentchanged', function (evt) {
+        if (evt.detail.name !== 'position') { return; }
+        assert.shallowDeepEqual(evt.detail.oldData, {x: 0, y: 0, z: 0});
+        assert.shallowDeepEqual(evt.detail.newData, {x: 1, y: 2, z: 3});
+        assert.equal(evt.detail.name, 'position');
+        assert.ok('id' in evt.detail);
+        done();
+      });
+      setTimeout(() => {
+        el.setAttribute('position', {x: 1, y: 2, z: 3});
+      });
+    });
+
+    test('emits componentchanged for value', function (done) {
+      el.addEventListener('componentchanged', function (evt) {
+        if (evt.detail.name !== 'visible') { return; }
+        assert.shallowDeepEqual(evt.detail.oldData, true);
+        assert.shallowDeepEqual(evt.detail.newData, false);
+        assert.equal(evt.detail.name, 'visible');
+        done();
+      });
+      setTimeout(() => {
+        el.setAttribute('visible', false);
+      });
+    });
+
+    test('does not emit componentchanged for multi-prop if not changed', function (done) {
+      el.addEventListener('componentinitialized', function (evt) {
+        if (evt.detail.name !== 'material') { return; }
+
+        el.addEventListener('componentchanged', function (evt) {
+          if (evt.detail.name !== 'material') { return; }
+          // Should not reach here.
+          assert.equal(true, false, 'Component should not have emitted changed.');
+        });
+
+        // Update.
+        el.setAttribute('material', 'color', 'red');
+
+        // Have `done()` race with the failing assertion in the event handler.
+        setTimeout(() => {
+          done();
+        }, 100);
+      });
+      // Initialization.
+      el.setAttribute('material', 'color', 'red');
+    });
+
+    test('does not emit componentchanged for single-prop if not changed', function (done) {
+      el.addEventListener('componentinitialized', function (evt) {
+        if (evt.detail.name !== 'position') { return; }
+
+        el.addEventListener('componentchanged', function (evt) {
+          if (evt.detail.name !== 'position') { return; }
+          // Should not reach here.
+          assert.equal(true, false, 'Component should not have emitted changed.');
+        });
+
+        // Update.
+        el.setAttribute('position', {x: 1, y: 2, z: 3});
+
+        // Have `done()` race with the failing assertion in the event handler.
+        setTimeout(() => {
+          done();
+        }, 100);
+      });
+      // Initialization.
+      el.setAttribute('position', {x: 1, y: 2, z: 3});
+    });
+
+    test('does not emit componentchanged for value if not changed', function (done) {
+      el.addEventListener('componentinitialized', function (evt) {
+        if (evt.detail.name !== 'visible') { return; }
+
+        el.addEventListener('componentchanged', function (evt) {
+          if (evt.detail.name !== 'visible') { return; }
+          // Should not reach here.
+          assert.equal(true, false, 'Component should not have emitted changed.');
+        });
+
+        // Update.
+        el.setAttribute('visible', false);
+
+        // Have `done()` race with the failing assertion in the event handler.
+        setTimeout(() => {
+          done();
+        }, 100);
+      });
+      // Initialization.
+      el.setAttribute('visible', false);
+    });
+
     test('emits componentinitialized', function (done) {
-      var el = entityFactory();
       el.addEventListener('componentinitialized', function (evt) {
         if (evt.detail.name !== 'material') { return; }
         assert.ok(evt.detail.data);
@@ -193,8 +295,41 @@ suite('Component', function () {
     });
   });
 
+  suite('resetProperty', function () {
+    var el;
+
+    setup(function (done) {
+      el = entityFactory();
+      el.addEventListener('loaded', () => { done(); });
+    });
+
+    test('resets property to default value', function () {
+      AFRAME.registerComponent('test', {
+        schema: {
+          bar: {default: 5},
+          foo: {default: 5}
+        }
+      });
+      el.setAttribute('test', {bar: 10, foo: 10});
+      el.components.test.resetProperty('bar');
+      assert.equal(el.getAttribute('test').bar, 5);
+      assert.equal(el.getAttribute('test').foo, 10);
+    });
+
+    test('resets property to default value for single-prop', function () {
+      AFRAME.registerComponent('test', {
+        schema: {default: 5}
+      });
+      el.setAttribute('test', 10);
+      el.components.test.resetProperty();
+      assert.equal(el.getAttribute('test'), 5);
+    });
+  });
+
   suite('third-party components', function () {
+    var el;
     setup(function () {
+      el = entityFactory();
       delete components.clone;
     });
 
@@ -205,7 +340,6 @@ suite('Component', function () {
     });
 
     test('can change behavior of entity', function (done) {
-      var el = entityFactory();
       registerComponent('clone', CloneComponent);
 
       el.addEventListener('loaded', function () {
@@ -534,6 +668,74 @@ suite('Component', function () {
       dummyComponent.pause();
       dummyComponent.pause();
       sinon.assert.calledOnce(this.pauseStub);
+    });
+  });
+});
+
+suite('registerComponent warnings', function () {
+  var sceneEl;
+  var script;
+
+  setup(function (done) {
+    var el = entityFactory();
+    el.addEventListener('loaded', function () {
+      sceneEl = el.sceneEl;
+      script = document.createElement('script');
+      script.innerHTML = `AFRAME.registerComponent('testorder', {});`;
+      done();
+    });
+  });
+
+  teardown(function () {
+    delete AFRAME.components.testorder;
+    delete Component.registrationOrderWarnings.testorder;
+    if (script.parentNode) { script.parentNode.removeChild(script); }
+  });
+
+  test('does not throw warning if component registered in head', function (done) {
+    assert.notOk(Component.registrationOrderWarnings.testorder, 'waht');
+    document.head.appendChild(script);
+    setTimeout(() => {
+      assert.notOk(Component.registrationOrderWarnings.testorder);
+      done();
+    });
+  });
+
+  test('does not throw warning if component registered before scene', function (done) {
+    assert.notOk(Component.registrationOrderWarnings.testorder, 'foo');
+    document.body.insertBefore(script, sceneEl);
+    setTimeout(() => {
+      assert.notOk(Component.registrationOrderWarnings.testorder);
+      done();
+    });
+  });
+
+  test('does not throw warning if component registered after scene loaded', function (done) {
+    assert.notOk(Component.registrationOrderWarnings.testorder, 'blah');
+    sceneEl.addEventListener('loaded', () => {
+      document.body.appendChild(script);
+      setTimeout(() => {
+        assert.notOk(Component.registrationOrderWarnings.testorder);
+        done();
+      });
+    });
+  });
+
+  test('throws warning if component registered after scene', function (done) {
+    assert.notOk(Component.registrationOrderWarnings.testorder);
+    document.body.appendChild(script);
+    setTimeout(() => {
+      assert.ok(Component.registrationOrderWarnings.testorder);
+      done();
+    });
+  });
+
+  test('throws warning if component registered within scene', function (done) {
+    assert.notOk(Component.registrationOrderWarnings.testorder);
+    sceneEl.appendChild(script);
+    setTimeout(() => {
+      assert.ok(Component.registrationOrderWarnings.testorder);
+      done();
     });
   });
 });

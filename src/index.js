@@ -1,10 +1,13 @@
-var debug = require('./utils/debug');
-var error = debug('A-Frame:warn');
-var info = debug('A-Frame:info');
+var utils = require('./utils/');
 
-if (document.currentScript && document.currentScript.parentNode !== document.head) {
-  error('Put the A-Frame <script> tag in the <head> of the HTML before <a-scene> to ensure everything for A-Frame is properly registered before they are used in the <body>.');
-  info('Also make sure that any component <script> tags are included after A-Frame, but still before <a-scene>.');
+var debug = utils.debug;
+var warn = debug('A-Frame:warn');
+
+if (document.currentScript && document.currentScript.parentNode !== document.head &&
+    !window.debug) {
+  warn('Put the A-Frame <script> tag in the <head> of the HTML *before* the scene to ' +
+       'ensure everything for A-Frame is properly registered before they are used from ' +
+       'HTML.');
 }
 
 // Polyfill `Promise`.
@@ -22,8 +25,8 @@ window.WebVRConfig = window.WebVRConfig || {
 };
 
 // Workaround for iOS Safari canvas sizing issues in stereo (webvr-polyfill/issues/102).
-// Should be fixed in iOS 10.
-if (/(iphone|ipod|ipad).*os.*(7|8|9)/i.test(navigator.userAgent)) {
+// Only for iOS on versions older than 10.
+if (utils.device.isIOSOlderThan10(navigator.userAgent)) {
   window.WebVRConfig.BUFFER_SCALE = 1 / window.devicePixelRatio;
 }
 
@@ -50,7 +53,6 @@ var THREE = window.THREE = require('./lib/three');
 var TWEEN = window.TWEEN = require('tween.js');
 
 var pkg = require('../package');
-var utils = require('./utils/');
 
 require('./components/index'); // Register standard components.
 require('./geometries/index'); // Register standard geometries.
@@ -68,7 +70,7 @@ require('./core/a-mixin');
 require('./extras/components/');
 require('./extras/primitives/');
 
-console.log('A-Frame Version: 0.4.0 (Date 01-02-2017, Commit #14d1813)');
+console.log('A-Frame Version: 0.5.0 (Date 10-02-2017, Commit #bf8b8f9)');
 console.log('three Version:', pkg.dependencies['three']);
 console.log('WebVR Polyfill Version:', pkg.dependencies['webvr-polyfill']);
 
@@ -89,6 +91,7 @@ module.exports = window.AFRAME = {
     getMeshMixin: require('./extras/primitives/getMeshMixin'),
     primitives: require('./extras/primitives/primitives').primitives
   },
+  scenes: require('./core/scene/scenes'),
   schema: require('./core/schema'),
   shaders: shaders,
   systems: systems,
